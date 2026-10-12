@@ -110,6 +110,15 @@
     }
     .entry .gourmet { font-weight: 700; }
     .entry .meta { font-size: 0.85rem; color: var(--muted); margin-top: 0.2rem; }
+    .entry .map-link {
+      display: inline-block;
+      margin-top: 0.3rem;
+      font-size: 0.82rem;
+      color: #1a73e8;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .entry .map-link:hover { text-decoration: underline; }
     .form-row { margin-bottom: 0.6rem; }
     .form-row label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.2rem; color: #555; }
     .form-row input {
@@ -125,6 +134,7 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(196,30,58,0.12);
     }
+    .form-hint { font-size: 0.75rem; color: #888; margin-top: 0.15rem; }
     .btn {
       padding: 0.6rem 1rem;
       border: none;
@@ -404,10 +414,10 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const STORAGE_KEY = "baymasGourmetBelt_v2";
-    let data = {}; // { code: [ {gourmet, name, comment}, ... ] }
+    const STORAGE_KEY = "baymasGourmetBelt_v3";
+    let data = {}; // { code: [ {gourmet, name, comment, map}, ... ] }
     let selectedCode = null;
-    let mode = "input"; // "input" or "output"
+    let mode = "input";
     let prefNames = {};
 
     function load() {
@@ -438,6 +448,19 @@
       setTimeout(() => t.classList.remove("show"), 1500);
     }
 
+    // Google Maps URLを正規化・検索用に変換
+    function toMapsUrl(raw) {
+      if (!raw) return null;
+      const s = raw.trim();
+      if (!s) return null;
+      // すでにGoogle MapsのURLっぽい場合はそのまま
+      if (/maps\.app\.goo\.gl|google\.com\/maps|maps\.google/i.test(s)) {
+        return s.startsWith("http") ? s : "https://" + s;
+      }
+      // それ以外は検索クエリとして扱う
+      return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s);
+    }
+
     function updateMapColorsAndCounts() {
       document.querySelectorAll(".prefecture").forEach(el => {
         const code = el.dataset.code;
@@ -446,7 +469,6 @@
         el.classList.toggle("has-gourmet", count > 0);
         el.classList.toggle("selected", code === selectedCode);
 
-        // Count label
         let label = el.querySelector(".count-label");
         if (!label) {
           label = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -478,15 +500,16 @@
           html += `<div class="entry">まだ登録がありません</div>`;
         } else {
           list.forEach(item => {
+            const mapsUrl = toMapsUrl(item.map);
             html += `<div class="entry">
               <div class="gourmet">${item.gourmet || ""}</div>
               <div class="meta">${item.name || ""}　${item.comment || ""}</div>
+              ${mapsUrl ? `<a class="map-link" href="${mapsUrl}" target="_blank" rel="noopener">📍 Googleマップで見る</a>` : ""}
             </div>`;
           });
         }
         panel.innerHTML = html;
       } else {
-        // input mode
         panel.innerHTML = `
           <div class="pref-title">${name}</div>
           <div class="form-row">
@@ -501,6 +524,11 @@
             <label>1行コメント</label>
             <input type="text" id="fComment" placeholder="例: スープが濃厚で最高">
           </div>
+          <div class="form-row">
+            <label>Googleマップの位置（任意）</label>
+            <input type="text" id="fMap" placeholder="共有リンクや店名を貼り付け">
+            <div class="form-hint">Googleマップの共有リンク（maps.app.goo.gl など）を貼るとそのまま開けます。店名だけでも検索できます。</div>
+          </div>
           <button class="btn" id="btnAdd">登録する</button>
           ${list.length ? `<div style="margin-top:0.8rem;font-size:0.85rem;color:#888;">現在 ${list.length}件登録済み</div>` : ""}
         `;
@@ -509,12 +537,13 @@
           const gourmet = document.getElementById("fGourmet").value.trim();
           const person = document.getElementById("fName").value.trim();
           const comment = document.getElementById("fComment").value.trim();
+          const map = document.getElementById("fMap").value.trim();
           if (!gourmet) {
             showToast("グルメ名を入力してください");
             return;
           }
           if (!data[code]) data[code] = [];
-          data[code].push({ gourmet, name: person, comment });
+          data[code].push({ gourmet, name: person, comment, map });
           save();
           updateProgress();
           updateMapColorsAndCounts();
@@ -543,7 +572,6 @@
           prefNames[code] = title.split("/")[0].trim();
         }
 
-        // Click on group or children
         const handler = (e) => {
           e.stopPropagation();
           showPanel(code);
